@@ -1,0 +1,13 @@
+<script>start("c:\\Users\\Admin\\Desktop\\USSD\\fee-wiz\\");</script>
+<script>onHasParentDirectory();</script>
+<script>addRow("mysite","mysite",1,0,"0 B",1742028190,"3/15/25, 11:43:10 AM");</script>
+<script>addRow("static","static",1,0,"0 B",1742028190,"3/15/25, 11:43:10 AM");</script>
+<script>addRow("ussd","ussd",1,0,"0 B",1742028192,"3/15/25, 11:43:12 AM");</script>
+<script>addRow(".gitignore",".gitignore",0,31,"31 B",1742028188,"3/15/25, 11:43:08 AM");</script>
+<script>addRow("build_files.sh","build_files.sh",0,105,"105 B",1742028188,"3/15/25, 11:43:08 AM");</script>
+<script>addRow("manage.py","manage.py",0,684,"684 B",1742028188,"3/15/25, 11:43:08 AM");</script>
+<script>addRow("railway.json","railway.json",0,346,"346 B",1742028188,"3/15/25, 11:43:08 AM");</script>
+<script>addRow("README.md","README.md",0,139,"139 B",1742028189,"3/15/25, 11:43:09 AM");</script>
+<script>addRow("render.yaml","render.yaml",0,306,"306 B",1742028189,"3/15/25, 11:43:09 AM");</script>
+<script>addRow("requirements.txt","requirements.txt",0,501,"501 B",1742028189,"3/15/25, 11:43:09 AM");</script>
+<script>addRow("vercel.json","vercel.json",0,585,"585 B",1742028189,"3/15/25, 11:43:09 AM");</script>
