@@ -121,7 +121,7 @@ class ClearanceRequest(models.Model):
         
     
         try:
-            # Send Email
+            
             subject = "Clearance Approved"
             message = f"🎉 Your clearance for {self.department} has been approved!"
             recipient_email = self.student.email  # Get student's email
