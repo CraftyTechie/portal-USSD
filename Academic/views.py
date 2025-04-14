@@ -1,8 +1,10 @@
+import json
+import re
 from ssl import SSLSession
 from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from .models import (
     ClearanceRequest,
@@ -12,8 +14,46 @@ from .models import (
     SupplementaryExam,
     SpecialExam,
 )
-import re
-from django.shortcuts import get_object_or_404
+
+# import re
+# from django.shortcuts import get_object_or_404
+# import requests
+# from datetime import datetime
+# import base64
+# def initiate_stk_push(phone, amount):
+#     access_token = get_access_token()  # get this using OAuth
+#     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+#     business_short_code = "174379"  # test paybill
+#     passkey = "YOUR_PASSKEY"
+#     password = base64.b64encode((business_short_code + passkey + timestamp).encode()).decode()
+#     payload = {
+#         "BusinessShortCode": business_short_code,
+#         "Password": password,
+#         "Timestamp": timestamp,
+#         "TransactionType": "CustomerPayBillOnline",
+#         "Amount": amount,
+#         "PartyA": phone,
+#         "PartyB": business_short_code,
+#         "PhoneNumber": phone,
+#         "CallBackURL": "https://yourdomain.com/mpesa/callback",
+#         "AccountReference": "Fees Payment",
+#         "TransactionDesc": "Paying university fees"
+#     }
+#     headers = {
+#         "Authorization": f"Bearer {access_token}",
+#         "Content-Type": "application/json"
+#     }
+# phone_number = session_store.get(session_id)
+# initiate_stk_push(phone_number, amount)
+# stk_url = "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest"
+# response = requests.post(stk_url, json=payload, headers=headers)
+# return response.json()
+# def mpesa_callback(request):
+#     data = json.loads(request.body)
+#     # Save transaction details from `data["Body"]["stkCallback"]`
+#     return JsonResponse({"ResultCode": 0, "ResultDesc": "Received"})
+# phone_number = session_store.get(session_id)
+# initiate_stk_push(phone_number, amount)
 
 
 
@@ -30,6 +70,7 @@ def home(request):
     student = None
     parts = text.split("*")
 
+    
     if parts and parts[-1] == "00":
         if len(parts) >= 2:
             parts = parts[:-2]  # Remove the last choice and the '00'
@@ -90,6 +131,26 @@ def home(request):
         response += "2. Fee balance \n"
         response += "3. Fee structure\n"
         response += "00. Back\n"
+# def ussd_callback(request):
+#     if request.method == "POST":
+#         phone_number = request.POST.get("phoneNumber")  # Should come from USSD provider
+#         text = request.POST.get("text", "")
+#         parts = text.split("*")
+    elif len(parts) == 5 and parts[-2] == "2" and parts[-1] == "1":
+     response = "CON Enter amount to pay:\n"
+     response += "00. Back\n"
+    elif len(parts) == 6 and parts[-3] == "2" and parts[-2] == "1":
+        amount = parts[-1]
+       
+
+        
+    # elif len(parts) == 6 and parts[-3] == "2" and parts[-2] == "1":
+    #  amount = parts[-1]
+    # phone_number = session_phone_number  # you should capture user’s phone
+    # initiate_stk_push(phone_number, amount)
+    # response = f"END You’re about to pay KES {amount}. Check your phone and enter MPESA PIN to complete payment. 🔐"
+      
+        
     if len(parts) == 4 and parts[-1] == "3":
         response = "CON Where do you want to clear \n"
         response += "1. Finance \n"
