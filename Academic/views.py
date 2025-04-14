@@ -45,6 +45,7 @@ def home(request):
     if text == "":
         response = "CON Welcome to MMUST student portal.\n"
         response = response + "1. Login"
+        return HttpResponse(response)
 
     if text == "1":
         # First request
