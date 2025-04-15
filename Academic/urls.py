@@ -1,11 +1,7 @@
 from django.urls import path
 from . import views
-from django.contrib import admin
+
 urlpatterns = [
-    
-    path("home/",views.home),
-  
-
-  
-
+    path("home/", views.home),
+    path("mpesa/callback", views.mpesa_callback, name="mpesa_callback"),
 ]
