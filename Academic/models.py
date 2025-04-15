@@ -53,7 +53,6 @@ class Unit(models.Model):
         return f"{self.code}- year {self.year.year_number}"
 
 
-
 class Transcript(models.Model):
     YEAR_CHOICES = (
         (1, "Year 1"),
@@ -74,7 +73,7 @@ class Transcript(models.Model):
         Student, on_delete=models.CASCADE, null=True, blank=True
     )
     year = models.IntegerField(choices=YEAR_CHOICES)
-    result_session = models.IntegerField()
+
     result_grade = models.CharField(max_length=2, choices=GRADE_CHOICE)  # B, C, D, etc.
 
     class Meta:
@@ -101,9 +100,18 @@ class SpecialExam(models.Model):
 
 
 class fee(models.Model):
-    fee_balance = models.FloatField()
-    fee_statement = models.FloatField()
-    fee_structure = models.FloatField()
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, null=True)
+    fee_balance = models.FloatField(blank=True)
+    fee_statement = models.FloatField(blank=True)
+    fee_structure = models.FloatField(blank=True)
+    amount = models.FloatField()
+
+
+class MpesaIDs(models.Model):
+    merchantRequestID = models.CharField(max_length=50)
+    checkoutRequestID = models.CharField(max_length=50)
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, null=True)
+    created_at = models.DateTimeField(auto_now=True)
 
 
 class ClearanceRequest(models.Model):
@@ -112,24 +120,22 @@ class ClearanceRequest(models.Model):
     status = models.CharField(max_length=20, default="Pending")
     timestamp = models.DateTimeField(auto_now_add=True)
     approve = models.BooleanField(default=False)
-    student = models.ForeignKey(Student, on_delete=models.CASCADE, null=True) 
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, null=True)
 
     def run_on_approve(self):
-        
+
         print("sending message.")
-        
-        
-    
+
         try:
-            
+
             subject = "Clearance Approved"
             message = f"🎉 Your clearance for {self.department} has been approved!"
             recipient_email = self.student.email  # Get student's email
 
             if recipient_email:
                 send_mail(
-                    subject,            # Subject of the email
-                    message,            # Email message
+                    subject,  # Subject of the email
+                    message,  # Email message
                     settings.DEFAULT_FROM_EMAIL,  # Sender email address (ensure this is set in your settings)
                     [recipient_email],  # List of recipient email addresses
                     fail_silently=False,
@@ -142,16 +148,15 @@ class ClearanceRequest(models.Model):
             print(f" Failed to send email: {e}")
 
     def save(self, *args, **kwargs):
-        
-        if self.pk: 
+
+        if self.pk:
             original = ClearanceRequest.objects.get(pk=self.pk)
-            
+
             if not original.approve and self.approve:
-              
+
                 self.status = "Approved"
                 self.run_on_approve()
 
-        
         super(ClearanceRequest, self).save(*args, **kwargs)
 
     def __str__(self):

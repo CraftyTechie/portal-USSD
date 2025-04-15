@@ -1,11 +1,10 @@
-import json
 import re
-from ssl import SSLSession
 from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+
 from .models import (
     ClearanceRequest,
     Student,
@@ -13,7 +12,11 @@ from .models import (
     Unit,
     SupplementaryExam,
     SpecialExam,
+    MpesaIDs,
+    fee,
 )
+
+from .mpesa import stk_push
 
 import re
 from django.shortcuts import get_object_or_404
@@ -22,72 +25,24 @@ from datetime import datetime
 import base64
 
 
-
-def get_access_token():
-    consumer_key = "YOUR_CONSUMER_KEY"
-    consumer_secret = "YOUR_CONSUMER_SECRET"
-    auth_url = "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials"
-    response = requests.get(auth_url, auth=(consumer_key, consumer_secret))
-    return response.json().get("access_token")
-def initiate_stk_push(phone, amount):
-    access_token = get_access_token()
-    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-    business_short_code = "174379"
-    passkey = "YOUR_PASSKEY"
-    password = base64.b64encode((business_short_code + passkey + timestamp).encode()).decode()
-    payload = {
-        "BusinessShortCode": business_short_code,
-        "Password": password,
-        "Timestamp": timestamp,
-        "TransactionType": "CustomerPayBillOnline",
-        "Amount": amount,
-        "PartyA": phone,
-        "PartyB": business_short_code,
-        "PhoneNumber": phone,
-        "CallBackURL": "https://yourdomain.com/mpesa/callback",  # Replace with your actual endpoint
-        "AccountReference": "Fees Payment",
-        "TransactionDesc": "Paying university fees"
-    }
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
-     }
-    
-    stk_url = "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest"
-    response = requests.post(stk_url, json=payload, headers=headers)
-    return response.json()
+@api_view(["POST"])
 def mpesa_callback(request):
-    if request.method == "POST":
-        data = json.loads(request.body)
-        print("MPESA Callback Received:", data)
-
-    
+    my_dict = request.data
+    if my_dict["Body"]["stkCallback"]["ResultCode"] == 0:
+        # date = datetime.strptime(str(my_dict["Body"]["stkCallback"]["CallbackMetadata"]["Item"][2]["Value"]), "%Y%m%d%H%M%S")
+        amount = my_dict["Body"]["stkCallback"]["CallbackMetadata"]["Item"][0]["Value"]
+        phone = my_dict["Body"]["stkCallback"]["CallbackMetadata"]["Item"][4]["Value"]
+        mpesa_code = my_dict["Body"]["stkCallback"]["CallbackMetadata"]["Item"][1][
+            "Value"
+        ]
+        checkoutRequestID = my_dict["Body"]["stkCallback"]["CheckoutRequestID"]
         try:
-            stk_callback = data["Body"]["stkCallback"]
-            result_code = stk_callback["ResultCode"]
-            checkout_request_id = stk_callback["CheckoutRequestID"]
-            
-            # Safely get amount from CallbackMetadata Item
-            amount = None
-            for item in stk_callback.get("CallbackMetadata", {}).get("Item", []):
-                if item.get("Name") == "Amount":
-                    amount = item.get("Value")
-                    break
+            newMpesaid = MpesaIDs.objects.get(checkoutRequestID=checkoutRequestID)
+            newFee = fee.objects.create(student=newMpesaid.student, amount=amount)
+        except MpesaIDs.DoesNotExist:
+            return HttpResponse("Null")
 
-            if not amount:
-                print("Amount not found in the callback response.")
-                return JsonResponse({"ResultCode": 1, "ResultDesc": "Amount not found"})
 
-            phone_number = stk_callback["CallbackMetadata"]["Item"][4]["Value"]
-
-            # Log the payment and perform business logic
-            print(f"Payment received from {phone_number} of amount KES {amount}")
-            return JsonResponse({"ResultCode": 0, "ResultDesc": "Callback received successfully"})
-        except KeyError as e:
-            print("Missing key in MPESA callback:", str(e))
-            return JsonResponse({"ResultCode": 1, "ResultDesc": "Callback data error"})
-
-# Create your views here.
 # @api_view()
 @csrf_exempt
 def home(request):
@@ -95,12 +50,12 @@ def home(request):
     session_id = request.POST.get("sessionId")
     service_code = request.POST.get("serviceCode")
     phone_number = request.POST.get("phoneNumber")
+    print("Phone: ", phone_number.split("+")[1])
     text = request.POST.get("text")
     response = ""
     student = None
     parts = text.split("*")
 
-    
     if parts and parts[-1] == "00":
         if len(parts) >= 2:
             parts = parts[:-2]  # Remove the last choice and the '00'
@@ -160,39 +115,48 @@ def home(request):
         response += "2. Fee balance \n"
         response += "3. Fee structure\n"
         response += "00. Back\n"
-# def ussd_callback(request):
-#     if request.method == "POST":
-#         phone_number = request.POST.get("phoneNumber")  # Should come from USSD provider
-#         text = request.POST.get("text", "")
-#         parts = text.split("*")
     elif len(parts) == 5 and parts[-2] == "2" and parts[-1] == "1":
-     response = "CON Enter amount to pay:\n"
-     response += "00. Back\n"
+        response = "CON Enter amount to pay:\n"
+        response += "00. Back\n"
     elif len(parts) == 6 and parts[-3] == "2" and parts[-2] == "1":
         amount = parts[-1]
         try:
-            amount = int(parts[-1])  # Ensure the amount is an integer
+            print(f"USSD parts: {parts}")  # Debugging the input
+            amount = int(parts[-1])  # Get amount from user input
+            print(f"Amount entered: {amount}, Type: {type(amount)}")
+
             if amount <= 0:
                 response = "END Invalid amount. Please enter a positive value."
             else:
-                # Initiate MPESA payment using the amount provided
-                payment_response = initiate_stk_push(phone_number, amount)
-                if 'ErrorMessage' in payment_response:
-                    response = f"END Payment initiation failed: {payment_response['ErrorMessage']}"
-                else:
-                    response = f"END You’re about to pay KES {amount}. Check your phone and enter MPESA PIN to complete payment. 🔐"
-        except ValueError:
-            response = "END Invalid amount entered. Please enter a valid number."
-       
+                print(" Amount is valid. Proceeding to initiate MPESA payment...")
 
-        
-    # elif len(parts) == 6 and parts[-3] == "2" and parts[-2] == "1":
-    #  amount = parts[-1]
-    # phone_number = session_phone_number  # you should capture user’s phone
-    # initiate_stk_push(phone_number, amount)
-    # response = f"END You’re about to pay KES {amount}. Check your phone and enter MPESA PIN to complete payment. 🔐"
-      
-        
+                try:
+                    payment_response = stk_push(
+                        phone_number.split("+")[1], amount, student
+                    )
+                    print(f"📲 Payment response: {payment_response}")
+
+                    if not payment_response:
+                        response = "END Payment failed: No response from MPESA."
+                    elif "errorMessage" in payment_response:
+                        response = f"END Payment initiation failed: {payment_response['errorMessage']}"
+                    elif "ResponseDescription" in payment_response:
+                        response = f"END You’re about to pay KES {amount}. Check your phone and enter MPESA PIN to complete payment."
+                    else:
+                        response = "END Payment response received, but could not parse it properly."
+
+                except Exception as e:
+                    print(f" Error during STK Push: {e}")
+                    response = "END  Something went wrong during payment. Please try again later."
+
+        except ValueError:
+            print(" Could not convert input to an integer.")
+            response = "END Please enter a valid number for the amount."
+
+        except Exception as e:
+            print(f" Unexpected error: {e}")
+            response = "END Something went wrong. Try again later."
+
     if len(parts) == 4 and parts[-1] == "3":
         response = "CON Where do you want to clear \n"
         response += "1. Finance \n"
@@ -220,13 +184,6 @@ def home(request):
                 response = f"END  Failed to save: {str(e)}"
         else:
             response = "END  Invalid department choice. Please try again."
-    # if len(parts) == 5 and parts[3] == "1" and parts[-1] == "1":
-    #     response = "CON choose the year \n"
-    #     response += "1. Year 1\n"
-    #     response += "2. Year 2\n"
-    #     response += "3. Year 3\n"
-    #     response += "4. Year 4\n"
-    #     response += "00. Back\n"
     if len(parts) == 5 and parts[3] == "3":
         if parts[-1] == "1":
             finClear = ClearanceRequest.objects.create(
@@ -329,6 +286,11 @@ def home(request):
                 response = "END Special exam registered successfully!!"
             except Unit.DoesNotExist:
                 response = "END Unit code does not exist!!"
+               
+        
+           
+            except Unit.MarksAlreadyExist:
+              response="END Marks already Exits"
         else:
             response = "END Enter a valid unit code!!"
     if len(parts) == 5 and parts[3] == "1" and parts[4] == "4":
