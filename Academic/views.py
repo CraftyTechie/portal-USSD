@@ -15,47 +15,77 @@ from .models import (
     SpecialExam,
 )
 
-# import re
-# from django.shortcuts import get_object_or_404
-# import requests
-# from datetime import datetime
-# import base64
-# def initiate_stk_push(phone, amount):
-#     access_token = get_access_token()  # get this using OAuth
-#     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-#     business_short_code = "174379"  # test paybill
-#     passkey = "YOUR_PASSKEY"
-#     password = base64.b64encode((business_short_code + passkey + timestamp).encode()).decode()
-#     payload = {
-#         "BusinessShortCode": business_short_code,
-#         "Password": password,
-#         "Timestamp": timestamp,
-#         "TransactionType": "CustomerPayBillOnline",
-#         "Amount": amount,
-#         "PartyA": phone,
-#         "PartyB": business_short_code,
-#         "PhoneNumber": phone,
-#         "CallBackURL": "https://yourdomain.com/mpesa/callback",
-#         "AccountReference": "Fees Payment",
-#         "TransactionDesc": "Paying university fees"
-#     }
-#     headers = {
-#         "Authorization": f"Bearer {access_token}",
-#         "Content-Type": "application/json"
-#     }
-# phone_number = session_store.get(session_id)
-# initiate_stk_push(phone_number, amount)
-# stk_url = "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest"
-# response = requests.post(stk_url, json=payload, headers=headers)
-# return response.json()
-# def mpesa_callback(request):
-#     data = json.loads(request.body)
-#     # Save transaction details from `data["Body"]["stkCallback"]`
-#     return JsonResponse({"ResultCode": 0, "ResultDesc": "Received"})
-# phone_number = session_store.get(session_id)
-# initiate_stk_push(phone_number, amount)
+import re
+from django.shortcuts import get_object_or_404
+import requests
+from datetime import datetime
+import base64
 
 
+
+def get_access_token():
+    consumer_key = "YOUR_CONSUMER_KEY"
+    consumer_secret = "YOUR_CONSUMER_SECRET"
+    auth_url = "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials"
+    response = requests.get(auth_url, auth=(consumer_key, consumer_secret))
+    return response.json().get("access_token")
+def initiate_stk_push(phone, amount):
+    access_token = get_access_token()
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    business_short_code = "174379"
+    passkey = "YOUR_PASSKEY"
+    password = base64.b64encode((business_short_code + passkey + timestamp).encode()).decode()
+    payload = {
+        "BusinessShortCode": business_short_code,
+        "Password": password,
+        "Timestamp": timestamp,
+        "TransactionType": "CustomerPayBillOnline",
+        "Amount": amount,
+        "PartyA": phone,
+        "PartyB": business_short_code,
+        "PhoneNumber": phone,
+        "CallBackURL": "https://yourdomain.com/mpesa/callback",  # Replace with your actual endpoint
+        "AccountReference": "Fees Payment",
+        "TransactionDesc": "Paying university fees"
+    }
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+     }
+    
+    stk_url = "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest"
+    response = requests.post(stk_url, json=payload, headers=headers)
+    return response.json()
+def mpesa_callback(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        print("MPESA Callback Received:", data)
+
+    
+        try:
+            stk_callback = data["Body"]["stkCallback"]
+            result_code = stk_callback["ResultCode"]
+            checkout_request_id = stk_callback["CheckoutRequestID"]
+            
+            # Safely get amount from CallbackMetadata Item
+            amount = None
+            for item in stk_callback.get("CallbackMetadata", {}).get("Item", []):
+                if item.get("Name") == "Amount":
+                    amount = item.get("Value")
+                    break
+
+            if not amount:
+                print("Amount not found in the callback response.")
+                return JsonResponse({"ResultCode": 1, "ResultDesc": "Amount not found"})
+
+            phone_number = stk_callback["CallbackMetadata"]["Item"][4]["Value"]
+
+            # Log the payment and perform business logic
+            print(f"Payment received from {phone_number} of amount KES {amount}")
+            return JsonResponse({"ResultCode": 0, "ResultDesc": "Callback received successfully"})
+        except KeyError as e:
+            print("Missing key in MPESA callback:", str(e))
+            return JsonResponse({"ResultCode": 1, "ResultDesc": "Callback data error"})
 
 # Create your views here.
 # @api_view()
@@ -140,6 +170,19 @@ def home(request):
      response += "00. Back\n"
     elif len(parts) == 6 and parts[-3] == "2" and parts[-2] == "1":
         amount = parts[-1]
+        try:
+            amount = int(parts[-1])  # Ensure the amount is an integer
+            if amount <= 0:
+                response = "END Invalid amount. Please enter a positive value."
+            else:
+                # Initiate MPESA payment using the amount provided
+                payment_response = initiate_stk_push(phone_number, amount)
+                if 'ErrorMessage' in payment_response:
+                    response = f"END Payment initiation failed: {payment_response['ErrorMessage']}"
+                else:
+                    response = f"END You’re about to pay KES {amount}. Check your phone and enter MPESA PIN to complete payment. 🔐"
+        except ValueError:
+            response = "END Invalid amount entered. Please enter a valid number."
        
 
         
